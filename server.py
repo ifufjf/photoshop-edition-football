@@ -1,93 +1,73 @@
-import subprocess
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
-import requests
-from bs4 import BeautifulSoup
+from flask import Flask, render_template, request, redirect, url_for
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+import os
+from werkzeug.utils import secure_filename
 
+# Configuración de Flask y Flask-Login
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'mi_clave_secreta'  # Cambia esto por una clave secreta segura
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['ALLOWED_EXTENSIONS'] = {'psd', 'jpg', 'jpeg', 'png'}
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
 
-# Configuración de la clave secreta para la sesión (necesaria para la autenticación)
-app.secret_key = 'una_clave_secreta_aqui'
+# Clase de Usuario para Flask-Login
+class User(UserMixin):
+    def __init__(self, id):
+        self.id = id
 
-# Página de login para proteger el acceso
+# Cargar usuario
+@login_manager.user_loader
+def load_user(user_id):
+    return User(user_id)
+
+# Página de login
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         password = request.form['password']
-        if password == 'tu_contraseña_segura':  # Asegúrate de cambiar la contraseña
-            session['logged_in'] = True
+        if password == 'mi_contraseña':  # Cambia la contraseña por una segura
+            user = User('1')
+            login_user(user)
             return redirect(url_for('index'))
-        else:
-            return 'Contraseña incorrecta, intenta de nuevo.', 401
-
     return render_template('login.html')
 
-# Redirigir si no está autenticado
-@app.before_request
-def verificar_autenticacion():
-    if 'logged_in' not in session and request.endpoint != 'login':
-        return redirect(url_for('login'))
-
-# Ruta principal para cargar la página
-@app.route('/')
+# Página principal donde el usuario elige archivo PSD y el partido
+@app.route('/', methods=['GET', 'POST'])
+@login_required
 def index():
+    if request.method == 'POST':
+        # Procesamiento de los archivos subidos
+        file = request.files['file']
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        
+        # Aquí puedes agregar la lógica para manipular el archivo PSD con GIMP o similar
+        # También deberías procesar los datos de Flashscore según el partido seleccionado
+        
+        return redirect(url_for('preview'))
+    
     return render_template('index.html')
 
-# Ruta para obtener todos los partidos de la página principal de Flashscore
-@app.route('/obtener-partidos', methods=['GET'])
-def obtener_partidos():
-    url = "https://www.flashscore.com"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+# Previsualización del archivo PSD modificado
+@app.route('/preview')
+@login_required
+def preview():
+    # Lógica para mostrar la previsualización del archivo PSD
+    # Asumiendo que has guardado el archivo de alguna forma
+    return render_template('preview.html')
 
-    partidos = []
-    # Aquí haces scraping para extraer los partidos de Flashscore
-    for partido in soup.find_all('div', class_='event__match'):
-        nombre_partido = partido.find('span', class_='event__title').text.strip()
-        partido_id = partido.get('data-eventid')
-        
-        partidos.append({'id': partido_id, 'nombre': nombre_partido})
+# Desconectar sesión de usuario
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
 
-    return jsonify({'partidos': partidos})
-
-# Ruta para obtener datos de un partido específico
-@app.route('/obtener-datos-flashscore', methods=['GET'])
-def obtener_datos_flashscore():
-    partido_id = request.args.get('partidoId')  # Obtiene el identificador del partido
-
-    # Aquí haces scraping para obtener los datos de ese partido
-    url = f"https://www.flashscore.com/match/{partido_id}"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-
-    # Extraer algunos datos del partido
-    competencia = soup.find('div', class_='competition-name').text.strip()
-    resultado = soup.find('div', class_='scoreboard').text.strip()
-    equipos = soup.find('div', class_='teams').text.strip()
-
-    return jsonify({
-        'competencia': competencia,
-        'resultado': resultado,
-        'equipos': equipos
-    })
-
-# Ruta para editar el PSD con los datos de Flashscore
-@app.route('/editar-psd', methods=['POST'])
-def editar_psd():
-    data = request.json
-    competencia = data.get('competencia')
-    resultado = data.get('resultado')
-    equipos = data.get('equipos')
-
-    # Llamar al script de GIMP para manipular el PSD
-    psd_path = "ruta/del/archivo.psd"
-    texto_agua = f"{competencia} - {resultado} - {equipos}"
-    imagen_fondo = "ruta/del/fondo.png"
-    
-    subprocess.run(['python3', 'gimp_script.py', psd_path, texto_agua, imagen_fondo])
-
-    # Responder con la URL de la previsualización
-    preview_url = "/static/psd-preview.png"
-    return jsonify({"mensaje": "PSD editado exitosamente", "preview_url": preview_url})
+# Verifica si el archivo tiene una extensión permitida
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 if __name__ == '__main__':
     app.run(debug=True)
