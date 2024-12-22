@@ -1,0 +1,6 @@
+Flask==2.3.2
+Flask-Login==0.6.2
+Werkzeug==2.3.2
+beautifulsoup4==4.12.2
+requests==2.31.0
+gimpfu==2.10.14  # Para interactuar con GIMP
