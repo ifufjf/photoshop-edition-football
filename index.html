@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar PSD con Datos de Flashscore</title>
+</head>
+<body>
+    <h1>Editar PSD con Datos de Flashscore</h1>
+    
+    <h3>Selecciona un Partido</h3>
+    
+    <select id="partido">
+        <!-- Los partidos se cargarán aquí dinámicamente -->
+    </select>
+
+    <button onclick="obtenerDatos()">Aceptar</button>
+
+    <h3>Previsualización</h3>
+    <div id="previsualizacion"></div>
+
+    <script>
+        window.onload = function() {
+            fetch('/obtener-partidos')
+                .then(response => response.json())
+                .then(data => {
+                    let select = document.getElementById('partido');
+                    data.partidos.forEach(partido => {
+                        let option = document.createElement('option');
+                        option.value = partido.id;
+                        option.textContent = partido.nombre;
+                        select.appendChild(option);
+                    });
+                });
+        };
+
+        function obtenerDatos() {
+            const partidoId = document.getElementById('partido').value;
+
+            fetch(`/obtener-datos-flashscore?partidoId=${partidoId}`)
+                .then(response => response.json())
+                .then(data => {
